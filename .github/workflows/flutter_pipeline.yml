@@ -1,0 +1,70 @@
+name: Flutter CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the code
+      - uses: actions/checkout@v4
+
+      # 2. Setup Java (Required for Android build)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 3. Setup Flutter
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # 4. Install Dependencies
+      - run: flutter pub get
+
+      # 5. Run Tests (Run on both branches to ensure quality)
+      - run: flutter test
+
+      # --- STAGING LOGIC ---
+      # If this is the 'staging' branch, we just build a debug APK to verify it compiles.
+      - name: Build Staging APK
+        if: github.ref == 'refs/heads/staging'
+        run: flutter build apk --debug
+
+      - name: Upload Staging Artifact
+        if: github.ref == 'refs/heads/staging'
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+      # --- PRODUCTION LOGIC ---
+      # If this is the 'main' branch, we build a Release APK.
+      - name: Build Production APK
+        if: github.ref == 'refs/heads/main'
+        run: flutter build apk --release
+
+      - name: Upload Production Artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      # Optional: Create a GitHub Release (Only for Main)
+      # This puts the APK in the "Releases" section of your repo.
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
